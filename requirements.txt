@@ -1,14 +1,18 @@
-torch>=2.1.0
-transformers>=4.44.0
-datasets>=2.20.0
-peft>=0.12.0
-accelerate>=0.33.0
-bitsandbytes>=0.43.0 ; platform_system == "Linux"
-scipy>=1.11.0
-numpy>=1.26.0
-pandas>=2.2.0
-scikit-learn>=1.4.0
-evaluate>=0.4.2
-rouge_score>=0.1.2
-tqdm>=4.66.0
-pyyaml>=6.0
+torch==2.4.1
+transformers==4.44.2
+datasets==2.21.0
+peft==0.12.0
+trl==0.10.1
+accelerate==0.33.0
+bitsandbytes==0.43.3 ; platform_system == "Linux"
+scipy==1.14.1
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.5.1
+evaluate==0.4.2
+rouge_score==0.1.2
+tqdm==4.66.5
+pyyaml==6.0.2
+matplotlib==3.9.2
+seaborn==0.13.2
+jupyter==1.1.1

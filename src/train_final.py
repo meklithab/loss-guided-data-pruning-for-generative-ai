@@ -25,11 +25,13 @@ def train_on_subset(
     Logs a ComputeTracker phase named f'train_{run_name}'."""
     model, tokenizer = load_model_and_tokenizer(
         model_name=config["model_name"],
+        model_revision=config.get("model_revision"),
         lora_r=config["lora_r"],
         lora_alpha=config["lora_alpha"],
         lora_dropout=config["lora_dropout"],
         target_modules=config["lora_target_modules"],
         use_4bit=config.get("use_4bit", False),
+        device=config.get("device", "auto"),
     )
 
     selected_set = set(selected_ids)
@@ -47,23 +49,26 @@ def train_on_subset(
     device = next(model.parameters()).device
     model.train()
 
-    with ComputeTracker(f"train_{run_name}") as tracker:
+    with ComputeTracker("final_training", run_id=run_name) as tracker:
         for epoch in range(config["train_epochs"]):
-            for batch in tqdm(loader, desc=f"train_{run_name} epoch {epoch + 1}/{config['train_epochs']}"):
+            optimizer.zero_grad()
+            for step, batch in enumerate(tqdm(loader, desc=f"train_{run_name} epoch {epoch + 1}/{config['train_epochs']}")):
                 input_ids = batch["input_ids"].to(device)
                 attention_mask = batch["attention_mask"].to(device)
                 labels = batch["labels"].to(device)
 
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-                loss = outputs.loss
+                loss = outputs.loss / max(int(config.get("grad_accum_steps", 1)), 1)
 
-                optimizer.zero_grad()
                 loss.backward()
-                optimizer.step()
+                if (step + 1) % max(int(config.get("grad_accum_steps", 1)), 1) == 0 or (step + 1) == len(loader):
+                    optimizer.step()
+                    optimizer.zero_grad()
                 tracker.add_tokens(int(attention_mask.sum().item()))
 
     report = tracker.report()
     report["n_examples_trained_on"] = len(subset)
+    report["training_tokens"] = report["tokens_processed"]
     append_to_log(report, log_path)
 
     return model, tokenizer

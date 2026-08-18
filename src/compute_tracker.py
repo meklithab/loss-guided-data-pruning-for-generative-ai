@@ -22,8 +22,9 @@ class ComputeTracker:
     """Context manager measuring wall time, peak VRAM, and (optionally) tokens processed
     for one phase of the pipeline (e.g. 'warmup_tracking', 'train_selected_30pct')."""
 
-    def __init__(self, phase_name: str):
+    def __init__(self, phase_name: str, run_id: str = None):
         self.phase_name = phase_name
+        self.run_id = run_id
         self.tokens_processed = 0
         self._start = None
         self._report = None
@@ -44,6 +45,7 @@ class ComputeTracker:
             peak_vram_gb = torch.cuda.max_memory_allocated() / (1024 ** 3)
         self._report = {
             "phase": self.phase_name,
+            "run_id": self.run_id,
             "wall_seconds": elapsed,
             "peak_vram_gb": peak_vram_gb,
             "tokens_processed": self.tokens_processed,

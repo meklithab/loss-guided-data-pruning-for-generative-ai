@@ -6,15 +6,17 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 def load_model_and_tokenizer(
     model_name: str,
+    model_revision: str = None,
     lora_r: int = 8,
     lora_alpha: int = 16,
     lora_dropout: float = 0.05,
     target_modules=None,
     use_4bit: bool = False,
+    device: str = "auto",
 ):
     target_modules = target_modules or ["q_proj", "k_proj", "v_proj", "o_proj"]
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, revision=model_revision)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -29,10 +31,12 @@ def load_model_and_tokenizer(
             bnb_4bit_use_double_quant=True,
         )
 
+    use_cuda = torch.cuda.is_available() and device != "cpu"
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
-        device_map="auto" if torch.cuda.is_available() else None,
+        revision=model_revision,
+        torch_dtype=torch.bfloat16 if use_cuda else torch.float32,
+        device_map="auto" if use_cuda else None,
         **quant_kwargs,
     )
 
@@ -47,7 +51,7 @@ def load_model_and_tokenizer(
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
 
-    if not torch.cuda.is_available():
+    if not use_cuda:
         model = model.to("cpu")
 
     return model, tokenizer

@@ -4,10 +4,8 @@ Phase 3 — turn scores into a concrete subset of example_ids for a given
 
 Strategies (matching the experimental-design ladder in the proposal):
     random               -- uniform random subset (the baseline everything must beat)
-    low_loss              -- keep the examples the model already finds EASIEST
-                              (tests whether "easy" examples are actually low-value)
-    high_loss              -- keep the examples the model finds HARDEST
-                              (tests whether "hard" examples are noisy/harmful vs. valuable)
+    initial_loss          -- keep examples with highest pre-training loss
+    final_loss            -- keep examples with highest final warm-up loss
     loss_delta              -- keep examples with the LARGEST raw improvement (learned the most)
     dynamics                -- keep examples with the best combination of relative_improvement,
                                  slope, and low variance (a z-scored composite "learning value")
@@ -48,14 +46,23 @@ def select_examples(
     if strategy == "random":
         return df.sample(n=n_keep, random_state=seed)["example_id"].tolist()
 
+    if strategy == "full":
+        return df["example_id"].tolist()
+
     if strategy == "low_loss":
         return df.sort_values("static_loss", ascending=True).head(n_keep)["example_id"].tolist()
 
-    if strategy == "high_loss":
+    if strategy in ("high_loss", "initial_loss"):
         return df.sort_values("static_loss", ascending=False).head(n_keep)["example_id"].tolist()
+
+    if strategy == "final_loss":
+        return df.sort_values("final_warmup_loss", ascending=False).head(n_keep)["example_id"].tolist()
 
     if strategy == "loss_delta":
         return df.sort_values("loss_delta", ascending=False).head(n_keep)["example_id"].tolist()
+
+    if strategy == "relative_improvement":
+        return df.sort_values("relative_improvement", ascending=False).head(n_keep)["example_id"].tolist()
 
     if strategy in ("dynamics", "dynamics_diversity"):
         # Composite "learning value": high relative improvement, steep negative

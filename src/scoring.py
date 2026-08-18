@@ -4,7 +4,9 @@ Phase 2 — turn per-example loss trajectories into scalar "value" signals.
 Input: {example_id: [loss_ckpt1, loss_ckpt2, ..., loss_ckptN]} (see track_training.py)
 Output: a pandas DataFrame, one row per example_id, with columns:
 
-    static_loss           -- loss at the FIRST checkpoint (how hard is it, early on)
+    loss_initial          -- loss before any warm-up training
+    loss_epoch_1          -- loss after one complete warm-up epoch
+    loss_epoch_2          -- loss after two complete warm-up epochs
     loss_delta            -- static_loss - loss at LAST checkpoint (raw improvement)
     relative_improvement  -- loss_delta / static_loss (improvement relative to initial difficulty)
     slope                 -- linear-regression slope of loss vs. checkpoint index (learning speed)
@@ -40,28 +42,37 @@ def compute_scores(trajectories: dict) -> pd.DataFrame:
         traj_arr = np.array(traj, dtype=float)
         x = np.arange(len(traj_arr))
 
-        static_loss = float(traj_arr[0])
-        final_loss = float(traj_arr[-1])
-        loss_delta = static_loss - final_loss
-        relative_improvement = loss_delta / static_loss if static_loss > 1e-8 else 0.0
+        loss_initial = float(traj_arr[0])
+        loss_epoch_1 = float(traj_arr[1]) if len(traj_arr) > 1 else None
+        loss_epoch_2 = float(traj_arr[2]) if len(traj_arr) > 2 else None
+        final_warmup_loss = float(traj_arr[-1])
+        loss_delta = loss_initial - final_warmup_loss
+        relative_improvement = loss_delta / loss_initial if loss_initial > 1e-8 else 0.0
 
         if len(traj_arr) >= 2 and np.std(x) > 0:
             slope = float(np.polyfit(x, traj_arr, 1)[0])
         else:
             slope = 0.0
         variance = float(np.var(traj_arr))
-        auc = float(_trapz(traj_arr, x)) if len(traj_arr) >= 2 else static_loss
+        auc = float(_trapz(traj_arr, x)) if len(traj_arr) >= 2 else loss_initial
+        dynamics_score = relative_improvement - slope - variance
 
         rows.append(
             {
                 "example_id": eid,
-                "static_loss": static_loss,
-                "final_loss": final_loss,
+                "loss_initial": loss_initial,
+                "loss_epoch_1": loss_epoch_1,
+                "loss_epoch_2": loss_epoch_2,
+                "initial_loss": loss_initial,
+                "static_loss": loss_initial,
+                "final_warmup_loss": final_warmup_loss,
+                "final_loss": final_warmup_loss,
                 "loss_delta": loss_delta,
                 "relative_improvement": relative_improvement,
                 "slope": slope,
                 "variance": variance,
                 "auc": auc,
+                "dynamics_score": float(dynamics_score),
             }
         )
     df = pd.DataFrame(rows).sort_values("example_id").reset_index(drop=True)

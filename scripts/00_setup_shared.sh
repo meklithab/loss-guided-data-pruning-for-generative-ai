@@ -4,5 +4,6 @@
 # the warm-up tracking cost is logged separately in compute_log.json — it's a
 # shared, one-time cost across all strategies/budgets, not per-run).
 set -e
+python main.py prepare
 python main.py track-warmup
 python main.py score

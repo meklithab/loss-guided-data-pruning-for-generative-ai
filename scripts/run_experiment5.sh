@@ -11,12 +11,8 @@
 set -e
 
 BUDGET="${1:-0.30}"
-
-if [ ! -f "results/selection_dynamics_$(python -c "print(int(${BUDGET}*100))")pct.json" ]; then
-  python main.py select --strategy dynamics --budget "$BUDGET"
-fi
-
-python main.py leave-k-out --strategy dynamics --budget "$BUDGET"
+python main.py run-experiment5 --budget "$BUDGET"
+python analyze.py
 
 echo "Experiment 5 done. See results/leave_k_out_dynamics_*.json for per-group"
 echo "true marginal value and its Spearman correlation with each cheap signal."

@@ -1,11 +1,13 @@
-# Default hyperparameters for the scoped-down 4-week plan.
-# Override any of these from the CLI, e.g. --model_name ... or --lora_r 16
-
 seed: 42
+seeds: [42, 123, 456]
 
 model_name: "Qwen/Qwen2.5-0.5B-Instruct"
+model_revision: "main"
 dataset_name: "tatsu-lab/alpaca"
+dataset_revision: "main"
 use_4bit: false
+device: "auto"
+results_dir: "results"
 
 # Data splits (fractions of the full dataset)
 val_frac: 0.05
@@ -20,9 +22,10 @@ lora_alpha: 16
 lora_dropout: 0.05
 lora_target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
 
-# Phase 1: warm-up tracking run
-# Fractions of ONE warm-up epoch at which we snapshot per-example loss.
-warmup_checkpoint_fracs: [0.10, 0.25, 0.50, 1.00]
+# Phase 1: exposure-balanced warm-up tracking run.
+# Measure all examples before training (L0), after 1 complete epoch (L1),
+# and after 2 complete epochs (L2). Do not use within-epoch checkpoints.
+warmup_epochs: 2
 warmup_batch_size: 8
 warmup_lr: 2.0e-4
 
@@ -32,17 +35,22 @@ train_batch_size: 8
 train_lr: 2.0e-4
 grad_accum_steps: 1
 
-# Budgets to sweep (fraction of full dataset kept)
-budgets: [0.10, 0.30, 0.50, 1.00]
+# Budgets to sweep (fraction of training pool kept)
+retention_percentages: [0.10, 0.30, 0.50, 0.70, 1.00]
+main_budget: 0.30
 
 # Selection strategies to compare
 strategies:
   - random
-  - low_loss
-  - high_loss
+  - initial_loss
+  - final_loss
   - loss_delta
+  - relative_improvement
   - dynamics
-  - dynamics_diversity
+
+experiment1_strategies: [full, random, initial_loss, dynamics]
+experiment2_signals: [initial_loss, final_loss, loss_delta, relative_improvement]
+experiment3_methods: [initial, dynamics_1epoch, dynamics_2epoch]
 
 # Experiment 5 (leave-k-out ground truth)
 leave_k_out:

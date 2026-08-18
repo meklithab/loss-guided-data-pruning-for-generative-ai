@@ -5,14 +5,7 @@
 # Run scripts/00_setup_shared.sh first.
 set -e
 
-BUDGET="${1:-0.30}"
-STRATEGIES=(random low_loss high_loss loss_delta dynamics dynamics_diversity)
+python main.py run-experiment2
+python analyze.py
 
-for STRATEGY in "${STRATEGIES[@]}"; do
-  echo "=== Experiment 2: strategy=$STRATEGY budget=$BUDGET ==="
-  python main.py select --strategy "$STRATEGY" --budget "$BUDGET"
-  python main.py train --strategy "$STRATEGY" --budget "$BUDGET"
-  python main.py evaluate --strategy "$STRATEGY" --budget "$BUDGET"
-done
-
-echo "Experiment 2 done. Compare results/eval_<strategy>_$(python -c "print(int(${BUDGET}*100))")pct.json across strategies."
+echo "Experiment 2 done. Compare results/tables/summary_mean_std.csv."

@@ -41,6 +41,7 @@ def run_leave_k_out(
     scores_df,
     train_hf_dataset,
     eval_hf_dataset,
+    run_id: str = "exp5",
     log_path: str = "results/compute_log.json",
 ) -> dict:
     lko_cfg = config["leave_k_out"]
@@ -59,28 +60,38 @@ def run_leave_k_out(
 
     # Step 3: baseline model on the full selected subset.
     baseline_model, baseline_tok = train_on_subset(
-        config, selected_ids, train_hf_dataset, run_name="lko_baseline", log_path=log_path
+        config, selected_ids, train_hf_dataset, run_name=f"{run_id}_baseline", log_path=log_path
     )
     baseline_metrics = evaluate_held_out(
-        baseline_model, baseline_tok, eval_subset, config["max_length"]
+        baseline_model, baseline_tok, eval_subset, config["max_length"], run_id=f"{run_id}_baseline", split_name="validation", log_path=log_path
     )
-    baseline_loss = baseline_metrics["held_out_loss"]
+    baseline_loss = baseline_metrics["validation_loss"]
 
     # Step 4: leave-group-out retraining.
     group_results = []
     for gi, group in enumerate(groups):
         remaining_ids = [i for i in selected_ids if i not in set(group)]
         model, tok = train_on_subset(
-            config, remaining_ids, train_hf_dataset, run_name=f"lko_group{gi}", log_path=log_path
+            config, remaining_ids, train_hf_dataset, run_name=f"{run_id}_group{gi}", log_path=log_path
         )
-        metrics = evaluate_held_out(model, tok, eval_subset, config["max_length"])
-        true_marginal_value = metrics["held_out_loss"] - baseline_loss  # loss goes UP when a valuable group is removed
+        metrics = evaluate_held_out(
+            model,
+            tok,
+            eval_subset,
+            config["max_length"],
+            run_id=f"{run_id}_group{gi}",
+            split_name="validation",
+            log_path=log_path,
+        )
+        true_marginal_value = metrics["validation_loss"] - baseline_loss
 
         group_scores = scores_df[scores_df["example_id"].isin(group)]
         mean_cheap_signal = {
             "mean_static_loss": float(group_scores["static_loss"].mean()),
+            "mean_initial_loss": float(group_scores["loss_initial"].mean()),
             "mean_loss_delta": float(group_scores["loss_delta"].mean()),
             "mean_relative_improvement": float(group_scores["relative_improvement"].mean()),
+            "mean_dynamics_score": float(group_scores["dynamics_score"].mean()),
         }
         if "learning_value" in group_scores.columns:
             mean_cheap_signal["mean_learning_value"] = float(group_scores["learning_value"].mean())
