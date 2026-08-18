@@ -1,92 +1,51 @@
-# ============================================================
-# Single source of truth for the whole experiment.
-# Every script reads this file — change values here, not in code.
-# ============================================================
+# Default hyperparameters for the scoped-down 4-week plan.
+# Override any of these from the CLI, e.g. --model_name ... or --lora_r 16
 
 seed: 42
 
-model:
-  name: "Qwen/Qwen2.5-0.5B-Instruct"
-  load_in_4bit: true
-  max_seq_len: 1024
+model_name: "Qwen/Qwen2.5-0.5B-Instruct"
+dataset_name: "tatsu-lab/alpaca"
+use_4bit: false
 
-dataset:
-  name: "tatsu-lab/alpaca"      # swap to "databricks/databricks-dolly-15k" if needed
-  text_field_instruction: "instruction"
-  text_field_input: "input"
-  text_field_output: "output"
-  eval_holdout_frac: 0.05       # held out ONCE, never touched by selection/training
-  raw_cache_dir: "./data/raw"
-  splits_dir: "./data/splits"
+# Data splits (fractions of the full dataset)
+val_frac: 0.05
+test_frac: 0.05
 
-lora:
-  r: 16
-  alpha: 32
-  dropout: 0.05
-  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+# Tokenization
+max_length: 256
 
-training:
-  epochs: 3
-  per_device_train_batch_size: 8
-  gradient_accumulation_steps: 2
-  learning_rate: 2.0e-4
-  warmup_ratio: 0.03
-  logging_steps: 10
-  save_strategy: "epoch"
-  output_dir: "./checkpoints"
+# LoRA
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.05
+lora_target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
 
-# Short warm-up LoRA training pass used to compute loss-DYNAMICS signals
-# (not a full training run). warmup_epochs=2 is the minimum needed to
-# measure how an example's loss CHANGES over training, not just its
-# value at one snapshot -- this is what lets us distinguish "the model
-# is actively learning from this example" from "this example just has
-# high loss" (e.g. because it's noisy/malformed).
-loss_scoring:
-  warmup_epochs: 2
+# Phase 1: warm-up tracking run
+# Fractions of ONE warm-up epoch at which we snapshot per-example loss.
+warmup_checkpoint_fracs: [0.10, 0.25, 0.50, 1.00]
+warmup_batch_size: 8
+warmup_lr: 2.0e-4
 
-diversity_scoring:                    # used only by the EXTENDED/optional methods
-  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
-  n_clusters: 50
+# Phase 4: final training on selected subset
+train_epochs: 3
+train_batch_size: 8
+train_lr: 2.0e-4
+grad_accum_steps: 1
 
-selection:
-  # --- CORE methods (the actual research question) ---
-  # loss_high:  keep examples with the highest final-warmup-epoch loss
-  #             (EL2N-style; the "obvious" hypothesis -- test it, don't assume it)
-  # loss_low:   keep examples with the LOWEST final loss (inverse of loss_high).
-  #             Included specifically to test whether "high loss = valuable" is
-  #             even true, vs. high loss just meaning noisy/malformed data.
-  # loss_delta: keep examples whose loss DROPPED the most between warmup
-  #             epoch 1 and epoch 2 -- i.e. the model is actively learning
-  #             from them, not just examples that happen to be hard.
-  # random:     matched-budget random baseline at every fraction below.
-  methods: ["random", "loss_high", "loss_low", "loss_delta"]
-  data_fractions: [0.10, 0.30, 0.50, 0.70, 1.00]   # 1.00 = full-data baseline
+# Budgets to sweep (fraction of full dataset kept)
+budgets: [0.10, 0.30, 0.50, 1.00]
 
-  # --- EXTENDED / optional methods (only run if core results land early) ---
-  # perplexity: static base-model perplexity (no training signal)
-  # diversity:  embedding + k-means cluster-balanced sampling
-  # hybrid:     weighted composite of loss_final + uncertainty + diversity
-  extended_methods: ["perplexity", "diversity", "hybrid"]
-  hybrid_weights: {loss: 0.4, uncertainty: 0.3, diversity: 0.3}
+# Selection strategies to compare
+strategies:
+  - random
+  - low_loss
+  - high_loss
+  - loss_delta
+  - dynamics
+  - dynamics_diversity
 
-  subsets_dir: "./data/subsets"
-
-ablations:
-  # PRIMARY ablation: the method grid above (loss_high vs loss_low vs
-  # loss_delta vs random, at every data fraction) already IS the core
-  # ablation -- it directly tests which loss-based signal actually
-  # carries "learning value" instead of assuming one does.
-
-  # EXTENDED ablations below only apply if you run the extended methods.
-  threshold_bands:            # for the perplexity "keep" band ablation
-    - {name: "lowest",  keep_low: 0.0,  keep_high: 0.25}
-    - {name: "midband", keep_low: 0.375, keep_high: 0.625}
-  cluster_counts: [10, 50, 100]   # for the diversity cluster-count ablation
-
-evaluation:
-  task_eval_n_prompts: 100     # small task-accuracy / generation-quality sample size
-  judge_model: null            # set to an API model name if you want pairwise judging
-
-results:
-  runs_csv: "./results/runs.csv"
-  plots_dir: "./results/plots"
+# Experiment 5 (leave-k-out ground truth)
+leave_k_out:
+  n_examples_sampled: 200   # examples drawn from the SELECTED (e.g. 30%) subset
+  group_size: 10            # examples retrained-without per group -> 20 groups
+  eval_subset_size: 300     # held-out examples used to measure loss delta per group
